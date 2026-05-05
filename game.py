@@ -25,16 +25,16 @@ class Durak:
         self.num_cards = num_cards
 
         # Shuffle self.deck & declare self.trump_suit
-        self.initialize_deck()
+        self.initialize_game()
 
         # Deal each player 6 cards & find first self.defender / self.attacker
         self.hands = []
-        self.deal_cards()
+        self.initialize_cards()
 
         # Define hands on the board
         self.attack_pile, self.defend_pile = [], []
 
-    def initialize_deck(self):
+    def initialize_game(self):
         assert self.num_cards in (24, 36, 52), \
             "Only 24, 36, or 52 card decks are supported."
         
@@ -54,7 +54,7 @@ class Durak:
 
         logging.info(f"The trump card is: {cards[-1]}")
     
-    def deal_cards(self):
+    def initialize_cards(self):
         assert self.num_players > 1 and self.num_players <= 6, \
             "Invalid number of players"
         assert self.num_players * 6 <= self.num_cards, \
@@ -81,35 +81,52 @@ class Durak:
         if attacker == self.defender: 
             return None
         
-        logging.log(f"Next attacker is {attacker}")
+        logging.info(f"Next attacker is {attacker}")
         return attacker
 
     def attack(self, card: Card):
         """Returns True if legal, False if illegal (too many cards or rank doesn't match)"""
         assert card
-        # make sure # attacking hands <= # defender's cards
-        if len(self.attack_pile) + 1 > len(self.hands[self.defender]) + len(self.defend_pile):
-            logging.log(f"Too many cards. Cannot throw {card}")
-            return False
-        
+
         # make sure rank exists on the current board
-        if card.rank not in {c.rank for c in self.attack_pile} and \
-            card.rank not in {c.rank for c in self.defend_pile}:
-            logging.log(f"Cannot throw {card}. {card.rank} does not exist in defender hands: \
-                        {self.defend_pile} or attacker hands: {self.attack_pile}")
+        if not self.is_legal_attack(card):
             return False
         
-        logging.log(f"Appended {card} to the attacking pile")
+        logging.info(f"Appended {card} to the attacking pile")
         self.attack_pile.append(card)
         self.hands[self.attacker].remove(card)
 
         return True
 
+    def is_legal_attack(self, card : Card):
+        # make sure # attacking hands <= # defender's cards
+        if len(self.attack_pile) + 1 > len(self.hands[self.defender]) + len(self.defend_pile):
+            logging.info(f"Too many cards. Cannot throw {card}")
+            return False
+        
+        if len(self.attack_pile) and card.rank not in {c.rank for c in self.attack_pile} and \
+            card.rank not in {c.rank for c in self.defend_pile}:
+            logging.info(f"Cannot throw {card}. {card.rank} does not exist either pile")
+            return False
+        
+        return True
+    
     def defend(self, card: Card, index : int):
         """Returns True if legal, False if illegal (index invalid, suit not equivalent, rank not larger)"""
         assert card
+
+        if not self.is_legal_defense(card, index):
+            return False
+        
+        self.defend_pile.append(card)
+        self.hands[self.defender].remove(card)
+
+        return True
+
+    def is_legal_defense(self, card : Card, index : int):
         # ensure card at index exists
         if index < 0 or index >= len(self.attack_pile):
+            logging.log(f"Can not defend. Index invalid.")
             return False
         
         to_defend_against = self.attack_pile[index]
@@ -123,34 +140,37 @@ class Durak:
             logging.log(f"Can not defend {to_defend_against} with a {card}. Suit not equivalent.")
             return False
         
-        self.defend_pile.append(card)
-        self.hands[self.defender].remove(card)
-
-        return True
-
-
     def bita(self):
         # clear hands on board and pass out new cards in order
         pass
 
-    def get_legal_throws(self):
-        # for RL
-        pass
-
     def __repr__(self):
-        title_str = f"<Durak {self.num_cards}-card | trump: {self.trump_suit} | deck size: {len(self.deck)}>"
+        col = 8 
+
+        def fmt_card(c):
+            return str(c).ljust(col)
+
+        atk_row = "".join(fmt_card(c) for c in self.attack_pile)
+        def_row = "".join(
+            fmt_card(self.defend_pile[i]) if i < len(self.defend_pile) else " " * col
+            for i in range(len(self.attack_pile))
+        )
+
+        trump_symbols = {"Hearts": "♥", "Diamonds": "♦", "Clubs": "♣", "Spades": "♠"}
+        title_str = f"<Durak {self.num_cards}-card | trump: {trump_symbols[self.trump_suit]} | deck: {len(self.deck)}>"
         hands_str = "\n".join(
-            f"  P{i} {'[ATK]' if i == self.attacker else '[DEF]' if i == self.defender else '     '}: "
-            f"{self.hands[i]}"
+            f"  P{i} {'[ATK]' if i == self.attacker else '[DEF]' if i == self.defender else '     '}: {self.hands[i]}"
             for i in range(self.num_players)
         )
-        piles_str = "I need to repr attacker & defender piles"
-        return f"{title_str}\n{hands_str}\n{piles_str}"
+        board_str = f"  DEF: {def_row}\n  ATK: {atk_row}" if self.attack_pile else "  (no cards on board)"
+
+        return f"{title_str}\n{hands_str}\n{board_str}"
     
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     game = Durak(num_cards=36, num_players=4)
+    game.attack(game.hands[game.attacker][0])
     print(game)
 
 
